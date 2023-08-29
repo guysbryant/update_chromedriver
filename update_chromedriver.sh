@@ -10,6 +10,25 @@ get_architecture() {
   uname -m
 }
 
+# Function to get the installed version of ChromeDriver
+get_installed_version() {
+  chromedriver --version 2>/dev/null | awk '{print $2}'
+}
+
+# Function to check if the latest version of ChromeDriver is installed
+latest_version_installed() {
+  if ! command_exists chromedriver; then
+    echo "ChromeDriver is not installed."
+    return 1
+  fi
+
+  local installed_version=$(get_installed_version)
+  local latest_version=$(get_latest_version)
+  echo "Your current version of ChromeDriver is $installed_version."
+  echo "The latest version available is $latest_version."
+  [ "$installed_version" == "$latest_version" ]
+}
+
 # Function to determine the appropriate ChromeDriver URL basd on the architecture
 get_chrome_driver_url() {
   local ARCHITECTURE="$1"
@@ -40,20 +59,26 @@ install_latest_version() {
   local TMPDIR=$(mktemp -d)
 
   echo "Downloading ChromeDriver version $LATEST_VERSION..."
-  curl -L "$CHROME_DRIVER_URL" -o "$TMP_DIR/chromedriver.zip"
+  curl -L "$CHROME_DRIVER_URL" -o "$TMPDIR/chromedriver.zip"
 
   if [ $? -eq 0 ]; then
     echo "Extracting..."
-    unzip -q "$TMP_DIR/chromedriver.zip" -d "$TMP_DIR"
-    sudo mv "$TMP_DIR/chromedriver" "/usr/local/bin/chromedriver"
+    unzip -q "$TMPDIR/chromedriver.zip" -d "$TMPDIR"
+    sudo mv "$TMPDIR/chromedriver" "/usr/local/bin/chromedriver"
     sudo chown root:wheel "/usr/local/bin/chromedriver"
     sudo chmod +x "/usr/local/bin/chromedriver"
-    echo "ChromeDriver updated successfully!"
+
+    if [ $? -eq 0 ]; then
+      echo "Latest ChromeDriver version installed successfully."
+    else
+      echo "Error: Failed to install ChromeDriver version $LATEST_VERSION."
+    fi
   else
     echo "Error: Failed to download ChromeDriver."
   fi
 
-  rm -rf "$TMP_DIR"
+  rm -rf "$TMPDIR"
+
 }
 
 # Check if curl and unzip commands are available
@@ -63,25 +88,17 @@ if ! command_exists curl || ! command_exists unzip; then
 fi
 
 # Check if ChromeDriver is already installed
-if command_exists chromedriver; then
-  echo "ChromeDriver is already installed."
-  echo "Do you want to update to the latest version? (y/n)"
-  read -r choice
-  if [[ $choice =~ ^[Yy]$ ]]; then
-    install_latest_version
-  else
-    echo "Exiting without updating ChromeDriver."
-    exit 0
-  fi
-else
-  echo "ChromeDriver is not installed."
-  echo "Do you want to install the latest version? (y/n)"
-  read -r choice
-  if [[ $choice =~ ^[Yy]$ ]]; then
-    install_latest_version
-  else
-    echo "Exiting without installing ChromeDriver."
-    exit 0
-  fi
+if latest_version_installed; then
+  echo "You already have the latest version of ChromeDriver."
+  exit 0
 fi
 
+# Verify that the user wants to install the latest version of ChromeDriver
+echo "Do you want to install the latest version? (y/n)"
+read -r choice
+if [[ $choice =~ ^[Yy]$ ]]; then
+  install_latest_version
+else
+  echo "Exiting without installing ChromeDriver."
+  exit 0
+fi
